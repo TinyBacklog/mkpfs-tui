@@ -1,0 +1,47 @@
+#sidebar {
+    width: 24;
+    border-right: solid $accent;
+}
+
+#work {
+    width: 1fr;
+    padding: 1 2;
+}
+
+.error {
+    color: $error;
+}
+
+.warning {
+    color: $warning;
+}
+
+.success {
+    color: $success;
+}
+
+.option-row {
+    height: auto;
+}
+
+.banner-pass {
+    color: $success;
+    text-style: bold;
+}
+
+.banner-fail {
+    color: $error;
+    text-style: bold;
+}
+
+#picker-box {
+    width: 80%;
+    height: 80%;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#picker-buttons {
+    height: auto;
+}

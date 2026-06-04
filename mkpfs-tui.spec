@@ -1,0 +1,36 @@
+# PyInstaller onedir spec for mkpfs-tui.
+# Build: uv run pyinstaller mkpfs-tui.spec   ->   dist/mkpfs-tui/mkpfs-tui
+from PyInstaller.utils.hooks import collect_all, collect_submodules
+
+datas = [("mkpfs_tui/styles.tcss", "mkpfs_tui")]
+binaries = []
+hiddenimports = collect_submodules("mkpfs")
+
+for pkg in ("textual", "rich"):
+    pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
+    datas += pkg_datas
+    binaries += pkg_binaries
+    hiddenimports += pkg_hidden
+
+a = Analysis(
+    ["mkpfs_tui/__main__.py"],
+    pathex=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+)
+pyz = PYZ(a.pure)
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="mkpfs-tui",
+    console=True,
+    disable_windowed_traceback=False,
+)
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="mkpfs-tui")

@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run --frozen pytest
+
+  publish-pypi:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  release-linux:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: uv run pyinstaller --noconfirm mkpfs-tui.spec
+      - name: Smoke the frozen dispatch
+        run: |
+          mkdir -p /tmp/src && echo hi > /tmp/src/a.txt
+          MKPFS_TUI_EXEC_MKPFS=1 ./dist/mkpfs-tui/mkpfs-tui pack folder /tmp/src /tmp/out.pfs --dry-run --no-adjust-output-file-extension
+      - name: Package
+        run: tar -C dist -czf mkpfs-tui-linux-x86_64.tar.gz mkpfs-tui
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: mkpfs-tui-linux-x86_64.tar.gz
+          generate_release_notes: true

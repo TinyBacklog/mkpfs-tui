@@ -8,3 +8,6 @@ __pycache__/
 coverage.xml
 dist/
 build/
+
+# local test images (do not commit)
+/img/

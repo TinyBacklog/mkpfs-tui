@@ -13,7 +13,7 @@ class PathField(Horizontal):
 
     DEFAULT_CSS = """
     PathField {
-        height: 1;
+        height: auto;
     }
     PathField Input {
         width: 1fr;

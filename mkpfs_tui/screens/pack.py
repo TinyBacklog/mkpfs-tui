@@ -48,35 +48,38 @@ class PackView(Container):
             yield RadioButton("File", id="pack-mode-file")
         yield PathField("Source", "dir", id="pack-source")
         yield PathField("Output image", "file", id="pack-output")
-        yield Select(
-            [("PS4", "PS4"), ("PS5", "PS5")],
-            value="PS4",
-            allow_blank=False,
-            id="pack-version",
-        )
-        yield Select(
-            [("32-bit inodes", 32), ("64-bit inodes", 64)],
-            value=32,
-            allow_blank=False,
-            id="pack-inode-bits",
-        )
-        yield Input(value="auto", id="pack-block-size", placeholder="block size (auto)")
-        yield Input(value="0", id="pack-threshold-gain", placeholder="threshold gain %")
-        yield Input(value="9", id="pack-compression-level", placeholder="compression level 0-9")
-        yield Input(value="0", id="pack-cpu-count", placeholder="cpu count (0=auto)")
-        yield Input(value="0", id="pack-min-compress-size", placeholder="min compress size")
+        with Horizontal(classes="field-row"):
+            yield Select(
+                [("PS4", "PS4"), ("PS5", "PS5")],
+                value="PS4",
+                allow_blank=False,
+                id="pack-version",
+            )
+            yield Select(
+                [("32-bit inodes", 32), ("64-bit inodes", 64)],
+                value=32,
+                allow_blank=False,
+                id="pack-inode-bits",
+            )
+        with Horizontal(classes="field-row"):
+            yield Input(value="auto", id="pack-block-size", placeholder="block size (auto)")
+            yield Input(value="0", id="pack-threshold-gain", placeholder="threshold gain %")
+            yield Input(value="9", id="pack-compression-level", placeholder="compression level 0-9")
+            yield Input(value="0", id="pack-cpu-count", placeholder="cpu count (0=auto)")
+            yield Input(value="0", id="pack-min-compress-size", placeholder="min compress size")
         yield Input(id="pack-ekpfs", placeholder="EKPFS key — 64 hex, with --encrypted")
-        for switch_id, label, default in (
-            ("pack-compress", "Compress", True),
-            ("pack-case-insensitive", "Case-insensitive", True),
-            ("pack-signed", "Signed", False),
-            ("pack-encrypted", "Encrypted", False),
-            ("pack-dry-run", "Dry run", False),
-            ("pack-verify", "Verify after", False),
-        ):
-            with Horizontal(classes="option-row"):
-                yield Label(label)
-                yield Switch(value=default, id=switch_id)
+        with Horizontal(id="pack-toggles"):
+            for switch_id, label, default in (
+                ("pack-compress", "Compress", True),
+                ("pack-case-insensitive", "Case-insensitive", True),
+                ("pack-signed", "Signed", False),
+                ("pack-encrypted", "Encrypted", False),
+                ("pack-dry-run", "Dry run", False),
+                ("pack-verify", "Verify after", False),
+            ):
+                with Horizontal(classes="toggle"):
+                    yield Label(label)
+                    yield Switch(value=default, id=switch_id)
         with Horizontal(classes="option-row"):
             yield Button("Pack", id="pack-run", variant="primary")
             yield Button("Cancel", id="pack-cancel", variant="error")
@@ -112,8 +115,66 @@ class PackView(Container):
         )
 
     def on_mount(self) -> None:
-        """Set initial inode-bits disabled state to match the default (Folder) mode."""
+        """Set initial inode-bits disabled state and widget labels."""
         self.query_one("#pack-inode-bits", Select).disabled = False
+        self._auto_output = ""
+
+        # Border titles for numeric inputs and EKPFS
+        titles = {
+            "pack-block-size": "Block size",
+            "pack-threshold-gain": "Threshold gain %",
+            "pack-compression-level": "Compression 0-9",
+            "pack-cpu-count": "CPU count (0=auto)",
+            "pack-min-compress-size": "Min compress size",
+            "pack-ekpfs": "EKPFS key (64 hex, with Encrypted)",
+        }
+        for wid, title in titles.items():
+            self.query_one(f"#{wid}", Input).border_title = title
+
+        # Border titles for the two Selects
+        self.query_one("#pack-version", Select).border_title = "PFS version"
+        self.query_one("#pack-inode-bits", Select).border_title = "Inode width"
+
+    def _derived_output(self, source: str) -> str:
+        """Derive the default output path from the source path.
+
+        Args:
+            source: The source path string.
+
+        Returns:
+            The suggested output path with appropriate extension.
+        """
+        compressed = self.query_one("#pack-compress", Switch).value
+        ext = ".ffpfsc" if compressed else ".ffpfs"
+        return str(Path(source).with_suffix(ext))
+
+    def _maybe_autofill_output(self) -> None:
+        """Fill the output field from the source if it hasn't been manually edited."""
+        source = self.query_one("#pack-source", PathField).value
+        out = self.query_one("#pack-output", PathField)
+        if source.strip() and (not out.value or out.value == self._auto_output):
+            derived = self._derived_output(source)
+            out.value = derived
+            self._auto_output = derived
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Auto-fill output when the source path changes.
+
+        Args:
+            event: The Input.Changed event.
+        """
+        parent = event.input.parent
+        if parent is not None and parent.id == "pack-source":
+            self._maybe_autofill_output()
+
+    def on_switch_changed(self, event: Switch.Changed) -> None:
+        """Update the auto-derived output extension when Compress is toggled.
+
+        Args:
+            event: The Switch.Changed event.
+        """
+        if event.switch.id == "pack-compress":
+            self._maybe_autofill_output()
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         """Disable the inode-bits Select when File mode is selected.

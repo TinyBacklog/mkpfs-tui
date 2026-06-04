@@ -10,7 +10,6 @@ from textual.widgets import Button, Input, Label, Switch, Tree
 from textual.widgets.tree import TreeNode as WidgetTreeNode
 
 from mkpfs_tui import mkpfs_runner
-from mkpfs_tui.messages import OperationFinished
 from mkpfs_tui.mkpfs_runner import TreeNode, TreeResult
 from mkpfs_tui.screens.read_view import ReadView
 from mkpfs_tui.widgets.path_field import PathField
@@ -43,11 +42,8 @@ class TreeView(ReadView):
         new_crypt = self.query_one("#tree-new-crypt", Switch).value
         self.run_operation(lambda: mkpfs_runner.read_tree(Path(image), ekpfs_hex=ekpfs, new_crypt=new_crypt))
 
-    def on_operation_finished(self, event: OperationFinished) -> None:
+    def render_result(self, result: object) -> None:
         """Populate the Tree widget and result panel from the TreeResult."""
-        if event.view_id != self.VIEW_ID:
-            return
-        result = event.result
         if not isinstance(result, TreeResult):
             return
         tree = self.query_one("#tree-widget", Tree)

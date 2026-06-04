@@ -34,6 +34,21 @@
     text-style: bold;
 }
 
+#verify-progress {
+    display: none;
+    width: 1fr;
+    margin: 1 0;
+}
+
+#verify-elapsed {
+    display: none;
+    text-align: center;
+}
+
+#about { align: center middle; }
+#about > * { width: auto; }
+#about Static { text-align: center; width: auto; }
+
 #picker-box {
     width: 80%;
     height: 80%;
@@ -44,4 +59,43 @@
 
 #picker-buttons {
     height: auto;
+}
+
+/* Pack form: inline selects + numeric row */
+.field-row {
+    height: auto;
+}
+
+.field-row > * {
+    width: 1fr;
+    margin: 0 1 0 0;
+}
+
+/* Borders so border_title is visible on inputs and selects */
+.field-row Input {
+    border: round $surface-lighten-2;
+}
+
+.field-row Select {
+    border: round $surface-lighten-2;
+}
+
+#pack-ekpfs {
+    border: round $surface-lighten-2;
+}
+
+/* Inline toggle row */
+#pack-toggles {
+    height: auto;
+}
+
+#pack-toggles .toggle {
+    width: auto;
+    height: auto;
+    margin: 0 2 0 0;
+}
+
+#pack-toggles .toggle Label {
+    width: auto;
+    padding: 1 1 0 0;
 }

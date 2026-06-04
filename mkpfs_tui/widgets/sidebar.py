@@ -13,6 +13,7 @@ ACTIONS: list[tuple[str, str]] = [
     ("verify", "Verify"),
     ("tree", "Tree"),
     ("unpack", "Unpack"),
+    ("about", "About"),
 ]
 
 
@@ -48,6 +49,11 @@ class Sidebar(Vertical):
     def compose(self) -> ComposeResult:
         """Build the ListView of NavItems."""
         yield ListView(*(NavItem(view_id, label) for view_id, label in ACTIONS))
+
+    def on_mount(self) -> None:
+        """Set the initial highlighted item to About (the last entry)."""
+        lv = self.query_one(ListView)
+        lv.index = len(ACTIONS) - 1
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         """Translate a highlight into an ActionSelected message."""

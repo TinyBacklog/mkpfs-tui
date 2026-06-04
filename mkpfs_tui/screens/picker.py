@@ -9,7 +9,7 @@ from textual.app import ComposeResult
 from textual.binding import BindingType
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, DirectoryTree, Label
+from textual.widgets import Button, DirectoryTree, Label, Tree
 
 
 class DirectoryPickerScreen(ModalScreen[str | None]):
@@ -42,18 +42,49 @@ class DirectoryPickerScreen(ModalScreen[str | None]):
         """Set the current selection (used by the tree handlers and tests)."""
         self._selection = path
 
+    def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:  # type: ignore[type-arg]
+        """Track the highlighted (cursor) node so Choose uses the current highlight.
+
+        Sets ``_selection`` whenever the highlighted node matches ``want``:
+        a file when ``want=="file"``, a directory when ``want=="dir"``.
+        Nodes with no data (e.g. the root placeholder before loading) are skipped.
+
+        Args:
+            event: The highlight event carrying the newly focused node.
+        """
+        node = event.node
+        if node.data is None:
+            return
+        path: Path = node.data.path
+        if (self.want == "file" and not path.is_dir()) or (self.want == "dir" and path.is_dir()):
+            self._selection = str(path)
+
     def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
-        """Record a file selection when picking a file."""
+        """Accept a file immediately when picking a file; otherwise record it.
+
+        Args:
+            event: The file-selected event from the DirectoryTree.
+        """
         if self.want == "file":
+            self.dismiss(str(event.path))
+        else:
             self.set_selection(str(event.path))
 
     def on_directory_tree_directory_selected(self, event: DirectoryTree.DirectorySelected) -> None:
-        """Record a directory selection when picking a directory."""
+        """Record a directory selection when picking a directory.
+
+        Args:
+            event: The directory-selected event from the DirectoryTree.
+        """
         if self.want == "dir":
             self.set_selection(str(event.path))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Choose dismisses with the selection; Cancel dismisses with None."""
+        """Choose dismisses with the selection; Cancel dismisses with None.
+
+        Args:
+            event: The button-pressed event.
+        """
         if event.button.id == "picker-choose":
             self.dismiss(self._selection)
         elif event.button.id == "picker-cancel":

@@ -10,7 +10,6 @@ from textual.widgets import Button, DataTable, Input, Label, Switch
 
 from mkpfs_tui import mkpfs_runner
 from mkpfs_tui.format import human_bytes
-from mkpfs_tui.messages import OperationFinished
 from mkpfs_tui.mkpfs_runner import Inspection
 from mkpfs_tui.screens.read_view import ReadView
 from mkpfs_tui.widgets.path_field import PathField
@@ -47,16 +46,21 @@ class InspectView(ReadView):
         new_crypt = self.query_one("#inspect-new-crypt", Switch).value
         self.run_operation(lambda: mkpfs_runner.inspect_image(Path(path), ekpfs_hex=ekpfs, new_crypt=new_crypt))
 
-    def on_operation_finished(self, event: OperationFinished) -> None:
+    def render_result(self, result: object) -> None:
         """Fill the table and result panel from the inspection."""
-        if event.view_id != self.VIEW_ID:
-            return
-        result = event.result
         if not isinstance(result, Inspection):
             return
         table = self.query_one("#inspect-table", DataTable)
         table.clear()
         block_size = str(result.header.block_size) if result.header else "—"
+        # Inspect skips file-payload hashing (it would OOM on huge files), so the
+        # checksums aren't real — point the user at Verify instead of showing zeros.
+        if result.hashes_computed:
+            data_crc32 = f"0x{result.data_crc32:08X}"
+            manifest = result.manifest_sha256 or "—"
+        else:
+            data_crc32 = "— (run Verify)"
+            manifest = "— (run Verify)"
         rows: list[tuple[str, str]] = [
             ("Image", result.image),
             ("Version", result.version_label or "—"),
@@ -67,8 +71,8 @@ class InspectView(ReadView):
             ("Files", str(result.file_count)),
             ("Compressed files", str(result.compressed_files)),
             ("Checked files", str(result.checked_files)),
-            ("Data CRC32", f"0x{result.data_crc32:08X}"),
-            ("Manifest SHA256", result.manifest_sha256 or "—"),
+            ("Data CRC32", data_crc32),
+            ("Manifest SHA256", manifest),
             ("Logical bytes", human_bytes(result.logical_file_bytes)),
             ("Stored bytes", human_bytes(result.stored_file_bytes)),
         ]

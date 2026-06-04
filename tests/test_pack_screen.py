@@ -239,3 +239,29 @@ async def test_overwrite_preclean(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         # the worker ran (fake produced PackFinished); the old file was pre-cleaned before launch
         # (we can't assert it's gone since the fake doesn't recreate it; assert the worker completed)
         assert view.query_one("#pack-phase")  # view still alive, no exception
+
+
+async def test_output_autofills_from_source() -> None:
+    app = _Host()
+    async with app.run_test(size=(140, 50)) as pilot:
+        view = app.query_one(PackView)
+        view.query_one("#pack-source", PathField).value = "/data/game.exfat"
+        await pilot.pause()
+        assert view.query_one("#pack-output", PathField).value == "/data/game.ffpfsc"  # compress on by default
+        # turning compression off flips the extension
+        view.query_one("#pack-compress", Switch).value = False
+        await pilot.pause()
+        assert view.query_one("#pack-output", PathField).value == "/data/game.ffpfs"
+
+
+async def test_output_respects_manual_edit() -> None:
+    app = _Host()
+    async with app.run_test(size=(140, 50)) as pilot:
+        view = app.query_one(PackView)
+        view.query_one("#pack-source", PathField).value = "/data/game.exfat"
+        await pilot.pause()
+        view.query_one("#pack-output", PathField).value = "/custom/out.bin"  # manual override
+        await pilot.pause()
+        view.query_one("#pack-source", PathField).value = "/data/other.exfat"  # source changes again
+        await pilot.pause()
+        assert view.query_one("#pack-output", PathField).value == "/custom/out.bin"  # NOT overwritten

@@ -25,15 +25,27 @@ async def test_theme_is_switchable() -> None:
         assert app.theme == "nord"
 
 
+def test_app_title() -> None:
+    assert MkpfsTuiApp.TITLE == "mkpfs-tui by ClaudioVarandas"
+
+
+async def test_default_view_is_about() -> None:
+    app = MkpfsTuiApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        switcher = app.query_one("#work", ContentSwitcher)
+        assert switcher.current == "about"
+
+
 async def test_sidebar_switches_every_view() -> None:
     app = MkpfsTuiApp()
     async with app.run_test() as pilot:
+        await pilot.pause()
         switcher = app.query_one("#work", ContentSwitcher)
-        assert switcher.current == "pack"
         nav = app.query_one(ListView)
         # Setting nav.index fires ListView.Highlighted -> Sidebar.ActionSelected -> ContentSwitcher.current.
         # One pause() drains that two-hop chain because wait_for_idle polls until the app is idle.
-        for index, view_id in enumerate(["pack", "inspect", "verify", "tree", "unpack"]):
+        for index, view_id in enumerate(["pack", "inspect", "verify", "tree", "unpack", "about"]):
             nav.index = index
             await pilot.pause()
             assert switcher.current == view_id

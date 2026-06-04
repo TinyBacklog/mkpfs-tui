@@ -11,6 +11,7 @@ from textual.containers import Horizontal
 from textual.widgets import ContentSwitcher, Footer, Header
 
 from mkpfs_tui import mkpfs_runner
+from mkpfs_tui.screens.about import AboutView
 from mkpfs_tui.screens.inspect import InspectView
 from mkpfs_tui.screens.pack import PackView
 from mkpfs_tui.screens.picker import DirectoryPickerScreen
@@ -26,7 +27,7 @@ class MkpfsTuiApp(App[None]):
 
     # NOTE(M6): when frozen with PyInstaller, styles.tcss must be declared as a data file in the .spec.
     CSS_PATH = "styles.tcss"
-    TITLE = "mkpfs-tui"
+    TITLE = "mkpfs-tui by ClaudioVarandas"
     BINDINGS: ClassVar[list[tuple[str, str, str]]] = [("ctrl+q", "quit", "Quit")]
 
     def compose(self) -> ComposeResult:
@@ -34,7 +35,8 @@ class MkpfsTuiApp(App[None]):
         yield Header(show_clock=True)
         with Horizontal():
             yield Sidebar(id="sidebar")
-            with ContentSwitcher(initial="pack", id="work"):
+            with ContentSwitcher(initial="about", id="work"):
+                yield AboutView(id="about")
                 yield PackView(id="pack")
                 yield InspectView(id="inspect")
                 yield VerifyView(id="verify")

@@ -22,10 +22,18 @@ class _Host(App[None]):
         self.selected.append(event.view_id)
 
 
-async def test_sidebar_lists_five_actions() -> None:
+async def test_sidebar_lists_six_actions() -> None:
     app = _Host()
     async with app.run_test():
-        assert len(app.query_one(ListView).children) == 5
+        assert len(app.query_one(ListView).children) == 6
+
+
+def test_sidebar_has_about_entry() -> None:
+    from mkpfs_tui.widgets.sidebar import ACTIONS
+
+    view_ids = [view_id for view_id, _ in ACTIONS]
+    assert "about" in view_ids
+    assert view_ids[-1] == "about"
 
 
 async def test_highlight_emits_matching_view_id() -> None:
@@ -36,3 +44,16 @@ async def test_highlight_emits_matching_view_id() -> None:
         await pilot.pause()
         assert app.selected, "expected at least one ActionSelected message"
         assert app.selected[-1] == "verify"
+
+
+async def test_highlight_about_emits_about_view_id() -> None:
+    from mkpfs_tui.widgets.sidebar import ACTIONS
+
+    app = _Host()
+    async with app.run_test() as pilot:
+        nav = app.query_one(ListView)
+        about_index = next(i for i, (vid, _) in enumerate(ACTIONS) if vid == "about")
+        nav.index = about_index
+        await pilot.pause()
+        assert app.selected, "expected at least one ActionSelected message"
+        assert app.selected[-1] == "about"

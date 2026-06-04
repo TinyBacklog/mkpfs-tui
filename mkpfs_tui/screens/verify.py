@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Button, Input, Label, Static, Switch
+from textual.timer import Timer
+from textual.widgets import Button, Input, Label, ProgressBar, Static, Switch
 
 from mkpfs_tui import mkpfs_runner
-from mkpfs_tui.messages import OperationFinished
 from mkpfs_tui.mkpfs_runner import Inspection
 from mkpfs_tui.screens.read_view import ReadView
 from mkpfs_tui.widgets.path_field import PathField
@@ -22,7 +23,7 @@ class VerifyView(ReadView):
     VIEW_ID = "verify"
 
     def compose(self) -> ComposeResult:
-        """Render the verify form, run button, banner, and result panel."""
+        """Render the verify form, run button, progress, banner, and result panel."""
         yield PathField("Image", "file", id="verify-image")
         yield PathField("Source (optional)", "dir", id="verify-source")
         yield Input(placeholder="Expect CRC32 — e.g. 0x1A2B3C4D, optional", id="verify-crc")
@@ -32,8 +33,41 @@ class VerifyView(ReadView):
             yield Label("newCrypt")
             yield Switch(id="verify-new-crypt")
         yield Button("Verify", id="verify-run", variant="primary")
+        yield ProgressBar(total=None, id="verify-progress")
+        yield Static("", id="verify-elapsed")
         yield Static("", id="verify-banner")
         yield ResultPanel(id="verify-result")
+
+    def on_mount(self) -> None:
+        """Hide the progress widgets and initialise timer state."""
+        self._verify_start: float = 0.0
+        self._verify_timer: Timer | None = None
+        self.query_one("#verify-progress", ProgressBar).display = False
+        self.query_one("#verify-elapsed", Static).display = False
+
+    def _on_operation_start(self) -> None:
+        """Show the indeterminate progress bar and start the elapsed timer."""
+        self._verify_start = time.monotonic()
+        bar = self.query_one("#verify-progress", ProgressBar)
+        elapsed = self.query_one("#verify-elapsed", Static)
+        bar.display = True
+        elapsed.display = True
+        elapsed.update("Verifying… 0:00")
+        self._verify_timer = self.set_interval(1.0, self._tick_elapsed)
+
+    def _tick_elapsed(self) -> None:
+        """Update the elapsed-time Static every second."""
+        total_seconds = int(time.monotonic() - self._verify_start)
+        minutes, seconds = divmod(total_seconds, 60)
+        self.query_one("#verify-elapsed", Static).update(f"Verifying… {minutes}:{seconds:02d}")
+
+    def _on_operation_end(self) -> None:
+        """Stop the elapsed timer and hide the progress widgets."""
+        if self._verify_timer is not None:
+            self._verify_timer.stop()
+            self._verify_timer = None
+        self.query_one("#verify-progress", ProgressBar).display = False
+        self.query_one("#verify-elapsed", Static).display = False
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Start verification when the Verify button is pressed."""
@@ -57,11 +91,8 @@ class VerifyView(ReadView):
             )
         )
 
-    def on_operation_finished(self, event: OperationFinished) -> None:
+    def render_result(self, result: object) -> None:
         """Render PASS/FAIL and any errors/warnings."""
-        if event.view_id != self.VIEW_ID:
-            return
-        result = event.result
         if not isinstance(result, Inspection):
             return
         banner = self.query_one("#verify-banner", Static)

@@ -18,7 +18,13 @@ class _Host(App[None]):
         yield InspectView()
 
 
-def _canned(*, ok: bool = True, errors: tuple[str, ...] = (), warnings: tuple[str, ...] = ()) -> Inspection:
+def _canned(
+    *,
+    ok: bool = True,
+    errors: tuple[str, ...] = (),
+    warnings: tuple[str, ...] = (),
+    hashes_computed: bool = False,
+) -> Inspection:
     return Inspection(
         image="game.pfs",
         ok=ok,
@@ -36,6 +42,7 @@ def _canned(*, ok: bool = True, errors: tuple[str, ...] = (), warnings: tuple[st
         stored_file_bytes=2048,
         errors=errors,
         warnings=warnings,
+        hashes_computed=hashes_computed,
     )
 
 
@@ -97,6 +104,34 @@ async def test_inspect_dashes_for_missing_header_and_version(monkeypatch: pytest
         table = app.query_one("#inspect-table", DataTable)
         assert table.get_row_at(1)[1] == "—"  # Version fallback
         assert table.get_row_at(3)[1] == "—"  # Block size fallback
+
+
+async def test_inspect_shows_checksums_as_not_computed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Inspect skips hashing, so the CRC32/manifest rows must say "run Verify",
+    # not 0xDEADBEEF / abc, even though the value type still carries those fields.
+    monkeypatch.setattr(mkpfs_runner, "inspect_image", lambda *a, **k: _canned(hashes_computed=False))
+    app = _Host()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.query_one(PathField).value = "game.pfs"
+        await pilot.click("#inspect-run")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        table = app.query_one("#inspect-table", DataTable)
+        assert table.get_row_at(9)[1] == "— (run Verify)"  # Data CRC32
+        assert table.get_row_at(10)[1] == "— (run Verify)"  # Manifest SHA256
+
+
+async def test_inspect_shows_real_checksums_when_computed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mkpfs_runner, "inspect_image", lambda *a, **k: _canned(hashes_computed=True))
+    app = _Host()
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.query_one(PathField).value = "game.pfs"
+        await pilot.click("#inspect-run")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        table = app.query_one("#inspect-table", DataTable)
+        assert table.get_row_at(9)[1] == "0xDEADBEEF"
+        assert table.get_row_at(10)[1] == "abc"
 
 
 async def test_inspect_rerun_replaces_rows(monkeypatch: pytest.MonkeyPatch) -> None:

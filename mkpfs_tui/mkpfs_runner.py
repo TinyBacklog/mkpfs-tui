@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from mkpfs import consts
+from mkpfs import pfs as _mkpfs_pfs
 from mkpfs.pbar import Progress
 from mkpfs.pfs import (
     BuildError,
@@ -25,10 +26,35 @@ from mkpfs.pfs import (
     extract_pfs_image,
     inspect_pfs_image,
     parse_ekpfs_key_hex,
+    read_pfs_info,
     verify_pfs_image,
 )
 
 from mkpfs_tui.progress_parser import iter_cr_lf, parse_progress_line
+
+# inspect_pfs_image hashes every file payload, loading each file wholly into RAM
+# (which OOM-kills on huge files). Inspect and Tree don't need the hashes, so we
+# install a gate around mkpfs's verify_file_payload_hashes that skips the work when
+# the calling thread sets the thread-local flag. Thread-local (not a global swap) so
+# a concurrent real Verify on another worker thread still gets true hashes — no race.
+_skip_payload_hashing = threading.local()
+_original_verify_file_payload_hashes = _mkpfs_pfs.verify_file_payload_hashes
+
+
+def _gated_verify_file_payload_hashes(*args: object, **kwargs: object) -> tuple[int, int, str]:
+    """Skip payload hashing on threads that set the thread-local flag (Inspect/Tree)."""
+    if getattr(_skip_payload_hashing, "active", False):
+        return (0, 0, "")
+    return _original_verify_file_payload_hashes(*args, **kwargs)
+
+
+_mkpfs_pfs.verify_file_payload_hashes = _gated_verify_file_payload_hashes
+
+_OUT_OF_MEMORY = (
+    "Out of memory reading this image — it contains a very large file "
+    "(mkpfs loads each file fully into RAM). Try an image with smaller files "
+    "or a machine with more RAM."
+)
 
 
 @dataclass(frozen=True)
@@ -63,6 +89,7 @@ class Inspection:
     stored_file_bytes: int
     errors: tuple[str, ...]
     warnings: tuple[str, ...]
+    hashes_computed: bool = False
 
 
 @dataclass(frozen=True)
@@ -103,8 +130,42 @@ def _ekpfs_bytes(ekpfs_hex: str) -> bytes | None:
     return parse_ekpfs_key_hex(ekpfs_hex)
 
 
-def _to_inspection(raw: PFSImageInspection) -> Inspection:
-    """Map an mkpfs PFSImageInspection into the TUI Inspection value type."""
+_NOT_A_PFS_IMAGE = (
+    "Not a PFS image (header magic mismatch). Pick a packed PFS image "
+    "(.pfs/.ffpfsc) — a raw .exfat is a filesystem you would Pack, not Inspect."
+)
+
+
+def _not_a_pfs_image(image: Path) -> str | None:
+    """Return a friendly error if `image` exists but isn't a PFS image, else None.
+
+    Detects a non-PFS file by its header magic (e.g. a raw .exfat), so callers can
+    surface a clear message instead of mkpfs's low-level inode-parse error. Missing
+    files return None (their "does not exist" error is already clear). Encrypted PFS
+    images have a valid magic, so they pass this check and proceed normally.
+
+    Args:
+        image: Path to the candidate image.
+
+    Returns:
+        A user-facing error string, or None if the file is (or may be) a PFS image.
+    """
+    if not image.is_file():
+        return None
+    header = read_pfs_info(image).header
+    if header is None or header.magic != consts.PFS_MAGIC:
+        return _NOT_A_PFS_IMAGE
+    return None
+
+
+def _to_inspection(raw: PFSImageInspection, *, hashes_computed: bool) -> Inspection:
+    """Map an mkpfs PFSImageInspection into the TUI Inspection value type.
+
+    Args:
+        raw: The mkpfs inspection result.
+        hashes_computed: Whether file-payload hashes were actually computed (True for
+            Verify; False for Inspect/Tree, which skip hashing to stay memory-safe).
+    """
     header: HeaderInfo | None = None
     if raw.header is not None:
         header = HeaderInfo(
@@ -132,6 +193,7 @@ def _to_inspection(raw: PFSImageInspection) -> Inspection:
         stored_file_bytes=raw.stored_file_bytes,
         errors=tuple(raw.errors),
         warnings=tuple(raw.warnings),
+        hashes_computed=hashes_computed,
     )
 
 
@@ -157,6 +219,22 @@ def _error_inspection(image: Path, message: str) -> Inspection:
     )
 
 
+def _inspect_structure_only(image: Path, ekpfs: bytes | None, new_crypt: bool) -> PFSImageInspection:
+    """Run inspect_pfs_image WITHOUT hashing file payloads.
+
+    Inspect and Tree need only the structure (header / inodes / dirents / counts).
+    mkpfs's verify_file_payload_hashes loads each file wholly into RAM to hash it,
+    which OOM-kills on huge files. The thread-local flag tells the installed gate
+    (`_gated_verify_file_payload_hashes`) to skip hashing for this call only, so a
+    concurrent real Verify on another thread is unaffected.
+    """
+    _skip_payload_hashing.active = True
+    try:
+        return inspect_pfs_image(image=image, ekpfs=ekpfs, new_crypt=new_crypt)
+    finally:
+        _skip_payload_hashing.active = False
+
+
 def inspect_image(image: Path, ekpfs_hex: str = "", new_crypt: bool = False) -> Inspection:
     """Inspect a PFS image and return a TUI-facing summary.
 
@@ -169,12 +247,19 @@ def inspect_image(image: Path, ekpfs_hex: str = "", new_crypt: bool = False) -> 
         An Inspection; on a bad key or read error, one with ``ok=False`` and the
         error message instead of raising.
     """
+    problem = _not_a_pfs_image(image)
+    if problem is not None:
+        return _error_inspection(image, problem)
     try:
         ekpfs = _ekpfs_bytes(ekpfs_hex)
-        raw = inspect_pfs_image(image=image, ekpfs=ekpfs, new_crypt=new_crypt)
+        # Inspect needs only the structure, not payload hashes — skip hashing so a
+        # huge file in the image cannot OOM-kill the process.
+        raw = _inspect_structure_only(image, ekpfs, new_crypt)
+    except MemoryError:
+        return _error_inspection(image, _OUT_OF_MEMORY)
     except (OSError, ValueError, BuildError) as exc:
         return _error_inspection(image, f"{type(exc).__name__}: {exc}")
-    return _to_inspection(raw)
+    return _to_inspection(raw, hashes_computed=False)
 
 
 def verify_image(
@@ -199,6 +284,9 @@ def verify_image(
         An Inspection; PASS is ``result.ok``. On a bad key/crc or read error,
         ``ok=False`` with the error message instead of raising.
     """
+    problem = _not_a_pfs_image(image)
+    if problem is not None:
+        return _error_inspection(image, problem)
     try:
         ekpfs = _ekpfs_bytes(ekpfs_hex)
         crc = int(expected_crc32, 0) if expected_crc32.strip() else None
@@ -212,9 +300,11 @@ def verify_image(
             ekpfs=ekpfs,
             new_crypt=new_crypt,
         )
+    except MemoryError:
+        return _error_inspection(image, _OUT_OF_MEMORY)
     except (OSError, ValueError, BuildError) as exc:
         return _error_inspection(image, f"{type(exc).__name__}: {exc}")
-    return _to_inspection(raw)
+    return _to_inspection(raw, hashes_computed=True)
 
 
 def _build_tree_node(
@@ -250,9 +340,13 @@ def read_tree(image: Path, ekpfs_hex: str = "", new_crypt: bool = False) -> Tree
     Note: a pathologically deep tree raises RecursionError internally, which is caught
         and returned as a failed TreeResult.
     """
+    if (problem := _not_a_pfs_image(image)) is not None:
+        return TreeResult(image=str(image), ok=False, root=None, errors=(problem,), warnings=())
     try:
         ekpfs = _ekpfs_bytes(ekpfs_hex)
-        raw = inspect_pfs_image(image=image, ekpfs=ekpfs, new_crypt=new_crypt)
+        # Tree needs only the structure, not payload hashes — skip hashing so a
+        # huge file in the image cannot OOM-kill the process.
+        raw = _inspect_structure_only(image, ekpfs, new_crypt)
         if raw.uroot_inode < 0:
             return TreeResult(
                 image=str(image),
@@ -262,6 +356,8 @@ def read_tree(image: Path, ekpfs_hex: str = "", new_crypt: bool = False) -> Tree
                 warnings=tuple(raw.warnings),
             )
         root = _build_tree_node("/", raw.uroot_inode, raw.dirents_by_inode, is_dir=True, seen=frozenset())
+    except MemoryError:
+        return TreeResult(image=str(image), ok=False, root=None, errors=(_OUT_OF_MEMORY,), warnings=())
     except (OSError, ValueError, BuildError, RecursionError) as exc:
         return TreeResult(
             image=str(image),
@@ -456,12 +552,16 @@ def unpack_image(
     Returns:
         An Extraction; on a bad key or extraction error, one with ``ok=False``.
     """
+    if (problem := _not_a_pfs_image(image)) is not None:
+        return _error_extraction(output_path, problem)
     try:
         ekpfs = _ekpfs_bytes(ekpfs_hex)
         progress = _UiProgress(on_step) if on_step is not None else None
         raw = extract_pfs_image(
             image=image, output_path=output_path, progress=progress, ekpfs=ekpfs, new_crypt=new_crypt
         )
+    except MemoryError:
+        return _error_extraction(output_path, _OUT_OF_MEMORY)
     except (OSError, ValueError, BuildError) as exc:
         return _error_extraction(output_path, f"{type(exc).__name__}: {exc}")
     return Extraction(

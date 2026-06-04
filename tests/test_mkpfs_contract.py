@@ -19,6 +19,8 @@ from mkpfs.pfs import (
     extract_pfs_image,
     inspect_pfs_image,
     parse_ekpfs_key_hex,
+    read_pfs_info,
+    verify_file_payload_hashes,
     verify_pfs_image,
 )
 
@@ -80,6 +82,18 @@ def test_extract_pfs_image_and_result_and_progress() -> None:
         assert name in fields, f"PFSExtractionResult lost field {name!r}"
     assert hasattr(Progress, "step")
     assert hasattr(Progress, "status")
+
+
+def test_verify_file_payload_hashes_exists() -> None:
+    # mkpfs_runner._inspect_structure_only monkeypatches this global to a no-op so
+    # Inspect/Tree skip loading every file into RAM. An upstream rename must fail here.
+    assert callable(verify_file_payload_hashes)
+
+
+def test_read_pfs_info_and_pfs_magic() -> None:
+    assert callable(read_pfs_info)
+    assert isinstance(consts.PFS_MAGIC, int)
+    assert "magic" in ParsedHeader.__dataclass_fields__
 
 
 def test_mkpfs_cli_main_exists() -> None:

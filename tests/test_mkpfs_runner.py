@@ -62,6 +62,39 @@ def test_inspect_image_maps_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.warnings == ()
 
 
+def test_inspect_structure_only_gates_hashing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A fake inspect that *calls* verify_file_payload_hashes (as the real one does)
+    # and records the tuple it got back, so we can prove it was skipped during the call.
+    recorded: dict[str, object] = {}
+
+    def fake_inspect(**kwargs: object) -> SimpleNamespace:
+        recorded["hashes"] = mkpfs_runner._mkpfs_pfs.verify_file_payload_hashes(None, None, None, None, [])
+        return _fake_raw()
+
+    monkeypatch.setattr(mkpfs_runner, "inspect_pfs_image", fake_inspect)
+    mkpfs_runner._inspect_structure_only(Path("game.pfs"), None, False)
+    # During the call, hashing was skipped to the (0, 0, "") no-op...
+    assert recorded["hashes"] == (0, 0, "")
+    # ...and the thread-local flag is cleared afterwards, so other threads/ops still hash.
+    assert getattr(mkpfs_runner._skip_payload_hashing, "active", False) is False
+
+
+def test_inspect_image_marks_hashes_not_computed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mkpfs_runner, "inspect_pfs_image", lambda **kwargs: _fake_raw())
+    result = mkpfs_runner.inspect_image(Path("game.pfs"))
+    assert result.hashes_computed is False
+
+
+def test_inspect_image_handles_memoryerror(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(**kwargs: object) -> SimpleNamespace:
+        raise MemoryError("cannot allocate 29 GiB")
+
+    monkeypatch.setattr(mkpfs_runner, "inspect_pfs_image", boom)
+    result = mkpfs_runner.inspect_image(Path("game.pfs"))
+    assert result.ok is False
+    assert "Out of memory" in result.errors[0]
+
+
 def test_inspect_image_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         mkpfs_runner,
@@ -245,6 +278,30 @@ def test_unpack_image_maps_result_and_drives_progress(monkeypatch: pytest.Monkey
     assert result.directories_created == 1
     assert result.bytes_written == 4096
     assert steps == [("extract", 1, 2), ("finalizing", 0, 0), ("extract", 2, 2)]
+
+
+def test_inspect_image_rejects_non_pfs_file(tmp_path: Path) -> None:
+    junk = tmp_path / "raw.exfat"
+    junk.write_bytes(b"\xeb\x76\x90EXFAT   " + b"\x00" * 1024)  # exfat-ish, not PFS
+    result = mkpfs_runner.inspect_image(junk)
+    assert result.ok is False
+    assert "Not a PFS image" in result.errors[0]
+
+
+def test_unpack_image_rejects_non_pfs_file(tmp_path: Path) -> None:
+    junk = tmp_path / "raw.exfat"
+    junk.write_bytes(b"\xeb\x76\x90EXFAT   " + b"\x00" * 1024)
+    result = mkpfs_runner.unpack_image(junk, tmp_path / "out")
+    assert result.ok is False
+    assert "Not a PFS image" in result.errors[0]
+
+
+def test_read_tree_rejects_non_pfs_file(tmp_path: Path) -> None:
+    junk = tmp_path / "raw.exfat"
+    junk.write_bytes(b"\xeb\x76\x90EXFAT   " + b"\x00" * 1024)
+    result = mkpfs_runner.read_tree(junk)
+    assert result.ok is False and result.root is None
+    assert "Not a PFS image" in result.errors[0]
 
 
 def test_unpack_image_reports_errors(monkeypatch: pytest.MonkeyPatch) -> None:

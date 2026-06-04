@@ -4,7 +4,34 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] — unreleased
+## [0.1.1] — 2026-06-04
+
+### Fixed
+
+- **File/directory picker** now returns the highlighted path on **Choose** (and accepts a file immediately
+  on click/Enter) — previously arrow-navigating then Choose did nothing.
+- **Inspect** and **Tree** no longer exhaust memory on images containing very large files: they skip payload
+  hashing (mkpfs loads each file wholly into RAM to hash it), so they read only the structure. The CRC32 /
+  manifest checksums now live in **Verify**; Inspect shows `— (run Verify)` for them.
+- Selecting a non-PFS file (e.g. a raw `.exfat`) shows a clear **"Not a PFS image"** message instead of a
+  low-level inode-parse error.
+- Out-of-memory is reported gracefully where catchable.
+
+### Added
+
+- **Pack**: the Output image path auto-derives from the Source (`.ffpfsc` / `.ffpfs` by compression) and
+  respects manual edits.
+- **Pack**: toggles are laid out inline and the numeric fields are labelled (less vertical space, clearer).
+- A **"Working…" spinner** on Inspect/Tree, and an **indeterminate progress bar + elapsed timer** on Verify.
+- An **About / welcome screen** (ASCII banner, description, author, version · license · repo) shown as the
+  default landing view and as a sidebar entry.
+- Taller path-input fields.
+
+### Changed
+
+- App title is now **"mkpfs-tui by ClaudioVarandas"**.
+
+## [0.1.0] — 2026-06-04
 
 First public release — a [Textual](https://textual.textualize.io/) terminal UI over
 [mkpfs](https://pypi.org/project/mkpfs/) exposing all five PlayStation PFS operations from one app.
@@ -38,4 +65,5 @@ First public release — a [Textual](https://textual.textualize.io/) terminal UI
 - Python ≥ 3.11. Pins `mkpfs >= 0.0.5, < 0.1.0` and `textual >= 0.86`.
 - Licensed GPL-3.0-or-later (it imports mkpfs, which is GPLv3).
 
+[0.1.1]: https://github.com/ClaudioVarandas/mkpfs-tui/releases/tag/v0.1.1
 [0.1.0]: https://github.com/ClaudioVarandas/mkpfs-tui/releases/tag/v0.1.0

@@ -80,4 +80,8 @@ def main() -> None:
         from mkpfs_tui.exfat import cli as exfat_cli
 
         raise SystemExit(exfat_cli.main(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == "deploy":
+        from mkpfs_tui.deploy import cli as deploy_cli
+
+        raise SystemExit(deploy_cli.main(sys.argv[2:]))
     MkpfsTuiApp().run()

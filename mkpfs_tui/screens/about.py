@@ -16,7 +16,7 @@ _BANNER = r"""           _           __           _         _
 |_| |_| |_|_|\_\ .__/|_| |___/      \__|\__,_|_|
                |_|                              """
 
-_DESCRIPTION = "A terminal UI for packing, inspecting, verifying, and unpacking PlayStation PFS images."
+_DESCRIPTION = "A terminal UI for packing, inspecting, verifying PlayStation PFS; build exFAT, and deploy to PS5."
 _BY = "by ClaudioVarandas"
 
 
@@ -44,6 +44,6 @@ class AboutView(Container):
         yield Static(_DESCRIPTION, id="about-description")
         yield Static(_BY, id="about-by")
         yield Static(
-            f"v{ver} · GPL-3.0-or-later · github.com/ClaudioVarandas/mkpfs-tui",
+            f"v{ver} · GPL-3.0-or-later · github.com/TinyBacklog/mkpfs-tui",
             id="about-footer",
         )

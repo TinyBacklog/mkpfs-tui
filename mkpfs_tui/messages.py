@@ -97,3 +97,52 @@ class UnpackCompleted(Message):
         self.view_id = view_id
         self.result = result
         super().__init__()
+
+
+class DeployProgressed(Message):
+    """An FTP-upload progress update (drives the deploy bar)."""
+
+    def __init__(self, view_id: str, sent: int, total: int) -> None:
+        """Carry the view id and byte counters.
+
+        Args:
+            view_id: Id of the view that started the deploy.
+            sent: Bytes uploaded so far.
+            total: Total bytes (0 when unknown).
+        """
+        self.view_id = view_id
+        self.sent = sent
+        self.total = total
+        super().__init__()
+
+
+class DeployFinished(Message):
+    """The terminal deploy message (drives the result panel / confirm retry)."""
+
+    def __init__(self, view_id: str, result: object) -> None:
+        """Carry the view id and a DeployResult payload.
+
+        Args:
+            view_id: Id of the view that started the deploy.
+            result: A deploy.deployer.DeployResult.
+        """
+        self.view_id = view_id
+        self.result = result
+        super().__init__()
+
+
+class DeployListing(Message):
+    """A remote directory listing (or an error) for the Deploy view's table."""
+
+    def __init__(self, view_id: str, rows: tuple[tuple[str, int], ...], error: str | None) -> None:
+        """Carry the view id, the (name, size) rows, and any error.
+
+        Args:
+            view_id: Id of the view that requested the listing.
+            rows: One (name, size_bytes) tuple per remote entry.
+            error: An error message, or None on success.
+        """
+        self.view_id = view_id
+        self.rows = rows
+        self.error = error
+        super().__init__()

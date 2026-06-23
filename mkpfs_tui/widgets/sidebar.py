@@ -1,4 +1,4 @@
-"""Sidebar navigation listing the five mkpfs actions."""
+"""Sidebar navigation listing the mkpfs actions plus Build exFAT and Deploy."""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ ACTIONS: list[tuple[str, str]] = [
     ("verify", "Verify"),
     ("tree", "Tree"),
     ("unpack", "Unpack"),
+    ("build", "Build exFAT"),
+    ("deploy", "Deploy"),
     ("about", "About"),
 ]
 

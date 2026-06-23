@@ -11,3 +11,6 @@ build/
 
 # local test images (do not commit)
 /img/
+
+# Subagent-driven-development workflow scratch (briefs/reports/diffs/ledger)
+.superpowers/

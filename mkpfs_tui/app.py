@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import sys
 from typing import ClassVar
 
 from textual.app import App, ComposeResult
@@ -12,6 +13,8 @@ from textual.widgets import ContentSwitcher, Footer, Header
 
 from mkpfs_tui import mkpfs_runner
 from mkpfs_tui.screens.about import AboutView
+from mkpfs_tui.screens.build_exfat import BuildExfatView
+from mkpfs_tui.screens.deploy import DeployView
 from mkpfs_tui.screens.inspect import InspectView
 from mkpfs_tui.screens.pack import PackView
 from mkpfs_tui.screens.picker import DirectoryPickerScreen
@@ -23,7 +26,7 @@ from mkpfs_tui.widgets.sidebar import Sidebar
 
 
 class MkpfsTuiApp(App[None]):
-    """Sidebar-driven TUI exposing the five mkpfs operations."""
+    """Sidebar-driven TUI: the five mkpfs operations plus an exFAT image builder."""
 
     # NOTE(M6): when frozen with PyInstaller, styles.tcss must be declared as a data file in the .spec.
     CSS_PATH = "styles.tcss"
@@ -42,6 +45,8 @@ class MkpfsTuiApp(App[None]):
                 yield VerifyView(id="verify")
                 yield TreeView(id="tree")
                 yield UnpackView(id="unpack")
+                yield BuildExfatView(id="build")
+                yield DeployView(id="deploy")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -66,11 +71,19 @@ class MkpfsTuiApp(App[None]):
 def main() -> None:
     """Console-script entry point.
 
-    First handles two frozen-binary concerns: multiprocessing's spawn bootstrap
-    (freeze_support) and the self-dispatch into the bundled mkpfs CLI used by the
-    pack subprocess. Otherwise it runs the TUI.
+    Handles three pre-TUI concerns: multiprocessing's spawn bootstrap, the
+    self-dispatch into the bundled mkpfs CLI (pack subprocess), and the
+    ``build-exfat`` subcommand. Otherwise it runs the TUI.
     """
     multiprocessing.freeze_support()
     if os.environ.get("MKPFS_TUI_EXEC_MKPFS"):
         raise SystemExit(mkpfs_runner.run_mkpfs_cli())
+    if len(sys.argv) > 1 and sys.argv[1] == "build-exfat":
+        from mkpfs_tui.exfat import cli as exfat_cli
+
+        raise SystemExit(exfat_cli.main(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == "deploy":
+        from mkpfs_tui.deploy import cli as deploy_cli
+
+        raise SystemExit(deploy_cli.main(sys.argv[2:]))
     MkpfsTuiApp().run()

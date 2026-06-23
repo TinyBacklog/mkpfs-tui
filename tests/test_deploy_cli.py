@@ -57,7 +57,12 @@ def test_app_main_dispatches_deploy(monkeypatch: MonkeyPatch) -> None:
     from mkpfs_tui import app
 
     captured: dict[str, list[str]] = {}
-    monkeypatch.setattr("mkpfs_tui.deploy.cli.main", lambda argv: captured.setdefault("argv", argv) or 0)
+
+    def fake_deploy_main(argv: list[str]) -> int:
+        captured["argv"] = argv
+        return 0
+
+    monkeypatch.setattr("mkpfs_tui.deploy.cli.main", fake_deploy_main)
     monkeypatch.setattr(sys, "argv", ["mkpfs-tui", "deploy", "img.exfat", "--host", "h"])
     monkeypatch.delenv("MKPFS_TUI_EXEC_MKPFS", raising=False)
     with pytest.raises(SystemExit) as exc:

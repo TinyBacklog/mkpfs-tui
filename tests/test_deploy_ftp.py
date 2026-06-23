@@ -50,7 +50,11 @@ class _FakeFTP:
 @pytest.fixture
 def fake(monkeypatch: pytest.MonkeyPatch) -> _FakeFTP:
     ftp = _FakeFTP()
-    monkeypatch.setattr(ftpmod, "_connect", lambda target: (ftp.set_pasv(True), ftp)[1])
+
+    def fake_connect(target: FtpTarget) -> _FakeFTP:
+        return ftp
+
+    monkeypatch.setattr(ftpmod, "_connect", fake_connect)
     return ftp
 
 
@@ -70,7 +74,6 @@ def test_test_connect_error(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_list_dir_parses_names_and_sizes(fake: _FakeFTP) -> None:
     rows = FtpClient().list_dir(FtpTarget(host="h"), "/data/etaHEN/games/")
     assert ("a.exfat", 10) in rows
-    assert fake.pasv is True
 
 
 def test_upload_streams_and_reports_progress(tmp_path: Path, fake: _FakeFTP) -> None:
@@ -101,3 +104,25 @@ def test_upload_cancel_raises(tmp_path: Path, fake: _FakeFTP) -> None:
             progress_cb=lambda s, t: None,
             should_cancel=lambda: True,
         )
+
+
+def test_connect_sets_passive_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that _connect sets FTP passive mode to True (tests the real _connect, not a monkeypatch)."""
+    import ftplib
+
+    class _RecordingFTP:
+        def __init__(self, timeout: int | None = None) -> None:
+            self.pasv: bool | None = None
+
+        def connect(self, host: str, port: int) -> None:
+            pass
+
+        def login(self, user: str, password: str) -> None:
+            pass
+
+        def set_pasv(self, flag: bool) -> None:
+            self.pasv = flag
+
+    monkeypatch.setattr(ftplib, "FTP", _RecordingFTP)
+    ftp = ftpmod._connect(FtpTarget(host="h"))
+    assert ftp.pasv is True
